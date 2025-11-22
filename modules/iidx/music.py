@@ -1,4 +1,5 @@
 import time
+import random
 from enum import IntEnum
 
 from fastapi import APIRouter, Request, Response
@@ -9,8 +10,8 @@ from core_database import get_db
 
 import config
 
-router = APIRouter(prefix="/local", tags=["local"])
-router.model_whitelist = ["LDJ", "KDZ", "JDZ"]
+router = APIRouter(tags=["local", "local2"])
+router.model_whitelist = ["LDJ"]
 
 
 class ClearFlags(IntEnum):
@@ -24,62 +25,129 @@ class ClearFlags(IntEnum):
     FULL_COMBO = 7
 
 
-@router.post("/{gameinfo}/music/getrank")
-async def music_getrank(request: Request):
+@router.post("/{prefix}/{gameinfo}/{IIDXver}music/getrank")
+async def iidx_music_getrank(IIDXver: str, request: Request):
     request_info = await core_process_request(request)
     game_version = request_info["game_version"]
 
-    iidxid = int(request_info["root"][0].attrib["iidxid"])
-    play_style = int(request_info["root"][0].attrib["cltype"])
+    root = request_info["root"][0]
+
+    play_style = int(root.attrib["cltype"])
+
+    requested_ids = [
+        int(root.get("iidxid", 0)),
+        int(root.get("iidxid0", 0)),
+        int(root.get("iidxid1", 0)),
+        int(root.get("iidxid2", 0)),
+        int(root.get("iidxid3", 0)),
+        int(root.get("iidxid4", 0)),
+    ]
+    if game_version >= 30:
+        requested_ids.append(int(root.get("iidxid5", 0)))
 
     all_scores = {}
     db = get_db()
+
+    for rival_idx, iidxid in enumerate(requested_ids, -1):
+        if iidxid == 0:
+            continue
+
+        profile = db.table("iidx_profile").get(where("iidx_id") == iidxid)["version"][
+            str(game_version)
+        ]
+
+        for record in db.table("iidx_scores_best").search(
+            (where("music_id") < (game_version + 1) * 1000)
+            & (where("play_style") == play_style)
+            & (where("iidx_id") == iidxid)
+        ):
+            music_id = record["music_id"]
+            clear_flg = record["clear_flg"]
+            ex_score = record["ex_score"]
+            miss_count = record["miss_count"]
+            chart_id = record["chart_id"]
+
+            if (rival_idx, music_id) not in all_scores:
+                all_scores[rival_idx, music_id] = {
+                    0: {"clear_flg": -1, "ex_score": -1, "miss_count": -1},
+                    1: {"clear_flg": -1, "ex_score": -1, "miss_count": -1},
+                    2: {"clear_flg": -1, "ex_score": -1, "miss_count": -1},
+                    3: {"clear_flg": -1, "ex_score": -1, "miss_count": -1},
+                    4: {"clear_flg": -1, "ex_score": -1, "miss_count": -1},
+                }
+
+            all_scores[rival_idx, music_id][chart_id]["clear_flg"] = clear_flg
+            all_scores[rival_idx, music_id][chart_id]["ex_score"] = ex_score
+            all_scores[rival_idx, music_id][chart_id]["miss_count"] = miss_count
+
+    names = {}
+    profiles = get_db().table("iidx_profile")
+    for p in profiles:
+        names[p["iidx_id"]] = {}
+        try:
+            names[p["iidx_id"]]["name"] = p["version"][str(game_version)]["djname"]
+        except KeyError:
+            names[p["iidx_id"]]["name"] = "UNK"
+
+    top_scores = {}
     for record in db.table("iidx_scores_best").search(
         (where("music_id") < (game_version + 1) * 1000)
-        & (where("iidx_id") == iidxid)
         & (where("play_style") == play_style)
     ):
         music_id = record["music_id"]
-        clear_flg = record["clear_flg"]
-        if game_version < 20:
-            m = str(music_id)
-            music_id = int("".join([m[: len(m) - 3], m[-2:]]))
-            if clear_flg == ClearFlags.FULL_COMBO and game_version < 19:
-                clear_flg = 6
         ex_score = record["ex_score"]
-        miss_count = record["miss_count"]
-        cid = record["chart_id"]
-        if cid in (0, 4, 5, 9):
-            continue
-        chart_id = cid - 1
+        chart_id = record["chart_id"]
+        iidx_id = record["iidx_id"]
 
-        if music_id not in all_scores:
-            all_scores[music_id] = {
-                0: {"clear_flg": -1, "ex_score": -1, "miss_count": -1},
-                1: {"clear_flg": -1, "ex_score": -1, "miss_count": -1},
-                2: {"clear_flg": -1, "ex_score": -1, "miss_count": -1},
+        if music_id not in top_scores:
+            top_scores[music_id] = {
+                0: {"djname": "", "clear_flg": -1, "ex_score": -1},
+                1: {"djname": "", "clear_flg": -1, "ex_score": -1},
+                2: {"djname": "", "clear_flg": -1, "ex_score": -1},
+                3: {"djname": "", "clear_flg": -1, "ex_score": -1},
+                4: {"djname": "", "clear_flg": -1, "ex_score": -1},
             }
 
-        all_scores[music_id][chart_id]["clear_flg"] = clear_flg
-        all_scores[music_id][chart_id]["ex_score"] = ex_score
-        all_scores[music_id][chart_id]["miss_count"] = miss_count
+        if ex_score > top_scores[music_id][chart_id]["ex_score"]:
+            top_scores[music_id][chart_id]["djname"] = names[iidx_id]["name"]
+            top_scores[music_id][chart_id]["clear_flg"] = 1
+            top_scores[music_id][chart_id]["ex_score"] = ex_score
 
     response = E.response(
-        E.music(
+        E(
+            f"{IIDXver}music",
             E.style(type=play_style),
             *[
                 E.m(
                     [
-                        -1,
+                        i,
                         k,
-                        *[all_scores[k][d]["clear_flg"] for d in range(3)],
-                        *[all_scores[k][d]["ex_score"] for d in range(3)],
-                        *[all_scores[k][d]["miss_count"] for d in range(3)],
+                        *[all_scores[i, k][d]["clear_flg"] for d in range(5)],
+                        *[all_scores[i, k][d]["ex_score"] for d in range(5)],
+                        *[all_scores[i, k][d]["miss_count"] for d in range(5)],
                     ],
-                    __type="s16",
+                    __type="s32" if game_version >= 33 else "s16",
                 )
-                for k in all_scores
-            ]
+                for i, k in all_scores
+            ],
+            *[
+                E.top(
+                    E.detail(
+                        [
+                            k,
+                            *[top_scores[k][d]["clear_flg"] for d in range(5)],
+                            *[top_scores[k][d]["ex_score"] for d in range(5)],
+                        ],
+                        __type="s32" if game_version >= 33 else "s16",
+                    ),
+                    name0=top_scores[k][0]["djname"],
+                    name1=top_scores[k][1]["djname"],
+                    name2=top_scores[k][2]["djname"],
+                    name3=top_scores[k][3]["djname"],
+                    name4=top_scores[k][4]["djname"],
+                )
+                for k in top_scores
+            ],
         )
     )
 
@@ -89,8 +157,8 @@ async def music_getrank(request: Request):
     return Response(content=response_body, headers=response_headers)
 
 
-@router.post("/{gameinfo}/music/crate")
-async def music_crate(request: Request):
+@router.post("/{prefix}/{gameinfo}/{IIDXver}music/crate")
+async def iidx_music_crate(IIDXver: str, request: Request):
     request_info = await core_process_request(request)
     game_version = request_info["game_version"]
 
@@ -102,70 +170,58 @@ async def music_crate(request: Request):
     crate = {}
     fcrate = {}
     for stat in all_score_stats:
-        if game_version < 20:
-            m = str(stat["music_id"])
-            stat["music_id"] = int("".join([m[: len(m) - 3], m[-2:]]))
-
         if stat["music_id"] not in crate:
-            crate[stat["music_id"]] = [101] * 6
+            crate[stat["music_id"]] = [1001] * 10
         if stat["music_id"] not in fcrate:
-            fcrate[stat["music_id"]] = [101] * 6
+            fcrate[stat["music_id"]] = [1001] * 10
 
-        if stat["play_style"] == 0:
-            old_to_new_adjust = -1
-        elif stat["play_style"] == 1:
-            old_to_new_adjust = 2
+        if stat["play_style"] == 1:
+            dp_idx = 5
+        else:
+            dp_idx = 0
 
-        crate[stat["music_id"]][stat["chart_id"] + old_to_new_adjust] = (
-            int(stat["clear_rate"]) // 10
-        )
-        fcrate[stat["music_id"]][stat["chart_id"] + old_to_new_adjust] = (
-            int(stat["fc_rate"]) // 10
-        )
+        crate[stat["music_id"]][stat["chart_id"] + dp_idx] = int(stat["clear_rate"])
+        fcrate[stat["music_id"]][stat["chart_id"] + dp_idx] = int(stat["fc_rate"])
 
     response = E.response(
-        E.music(*[E.c(crate[k] + fcrate[k], mid=k, __type="u8") for k in crate])
+        E(f"{IIDXver}music", *[E.c(crate[k] + fcrate[k], mid=k, __type="s32") for k in crate])
     )
 
     response_body, response_headers = await core_prepare_response(request, response)
     return Response(content=response_body, headers=response_headers)
 
 
-@router.post("/{gameinfo}/music/reg")
-async def music_reg(request: Request):
+@router.post("/{prefix}/{gameinfo}/{IIDXver}music/reg")
+async def iidx_music_reg(IIDXver: str, request: Request):
     request_info = await core_process_request(request)
     game_version = request_info["game_version"]
 
     timestamp = time.time()
 
-    root = request_info["root"][0]
+    log = request_info["root"][0].find("music_play_log")
 
-    clear_flg = int(root.attrib["cflg"])
-    clid = int(root.attrib["clid"])
-    great_num = int(root.attrib["gnum"])
-    iidx_id = int(root.attrib["iidxid"])
-    miss_num = int(root.attrib["mnum"])
-    pgreat_num = int(root.attrib["pgnum"])
-    pid = int(root.attrib["pid"])
-    ex_score = (pgreat_num * 2) + great_num
-    if game_version == 20:
-        is_death = int(root.attrib["is_death"])
-        music_id = int(root.attrib["mid"])
-    else:
-        is_death = 1 if clear_flg < ClearFlags.ASSIST_CLEAR else 0
-        m = str(root.attrib["mid"])
-        music_id = int("0".join([m[: len(m) - 2], m[-2:]]))
-        if clear_flg == 6 and game_version < 19:
-            clear_flg = ClearFlags.FULL_COMBO
+    clear_flg = int(request_info["root"][0].attrib["cflg"])
+    clid = int(request_info["root"][0].attrib["clid"])
+    is_death = int(request_info["root"][0].attrib["is_death"])
+    pid = int(request_info["root"][0].attrib["pid"])
 
-    if clid < 3:
-        note_id = clid + 1
-        play_style = 0
-    else:
-        note_id = clid - 2
-        play_style = 1
+    play_style = int(log.attrib["play_style"])
+    ex_score = int(log.attrib["ex_score"])
+    folder_type = int(log.attrib["folder_type"])
+    gauge_type = int(log.attrib["gauge_type"])
+    graph_type = int(log.attrib["graph_type"])
+    great_num = int(log.attrib["great_num"])
+    iidx_id = int(log.attrib["iidx_id"])
+    miss_num = int(log.attrib["miss_num"]) if is_death == 0 else -1
+    mode_type = int(log.attrib["mode_type"])
+    music_id = int(log.attrib["music_id"])
+    note_id = int(log.attrib["note_id"])
+    option1 = int(log.attrib["option1"])
+    option2 = int(log.attrib["option2"])
+    pgreat_num = int(log.attrib["pgreat_num"])
 
-    ghost = root.find("ghost").text
+    ghost = log.find("ghost").text
+    ghost_gauge = log.find("ghost_gauge").text
 
     db = get_db()
     db.table("iidx_scores").insert(
@@ -183,7 +239,14 @@ async def music_reg(request: Request):
             "great_num": great_num,
             "ex_score": ex_score,
             "miss_count": miss_num,
+            "folder_type": folder_type,
+            "gauge_type": gauge_type,
+            "graph_type": graph_type,
+            "mode_type": mode_type,
+            "option1": option1,
+            "option2": option2,
             "ghost": ghost,
+            "ghost_gauge": ghost_gauge,
         },
     )
 
@@ -195,15 +258,11 @@ async def music_reg(request: Request):
     )
     best_score = {} if best_score is None else best_score
 
-    if clear_flg < ClearFlags.EASY_CLEAR:
-        miss_num = -1
     best_miss_count = best_score.get("miss_count", miss_num)
-    if best_miss_count == -1:
-        miss_count = max(miss_num, best_miss_count)
-    elif clear_flg > ClearFlags.ASSIST_CLEAR:
-        miss_count = min(miss_num, best_miss_count)
+    if best_miss_count == -1 or miss_num ==-1:
+        miss_count = max(miss_num, best_miss_count) 
     else:
-        miss_count = best_miss_count
+        miss_count = min(miss_num, best_miss_count)
     best_ex_score = best_score.get("ex_score", ex_score)
     best_score_data = {
         "game_version": game_version,
@@ -215,9 +274,17 @@ async def music_reg(request: Request):
         "miss_count": miss_count,
         "ex_score": max(ex_score, best_ex_score),
         "ghost": ghost if ex_score >= best_ex_score else best_score.get("ghost", ghost),
-        "ghost_gauge": best_score.get("ghost_gauge", 0),
+        "ghost_gauge": (
+            ghost_gauge
+            if ex_score >= best_ex_score
+            else best_score.get("ghost_gauge", ghost_gauge)
+        ),
         "clear_flg": max(clear_flg, best_score.get("clear_flg", clear_flg)),
-        "gauge_type": best_score.get("gauge_type", 0),
+        "gauge_type": (
+            gauge_type
+            if ex_score >= best_ex_score
+            else best_score.get("gauge_type", gauge_type)
+        ),
     }
 
     db.table("iidx_scores_best").upsert(
@@ -283,11 +350,12 @@ async def music_reg(request: Request):
                 "opname": config.arcade,
                 "name": game_profile["djname"],
                 "pid": game_profile["region"],
-                "body": game_profile.get("body", 0),
-                "face": game_profile.get("face", 0),
-                "hair": game_profile.get("hair", 0),
-                "hand": game_profile.get("hand", 0),
-                "head": game_profile.get("head", 0),
+                # "back": game_profile.get("back", 0),
+                "body": game_profile["body"],
+                "face": game_profile["face"],
+                "hair": game_profile["hair"],
+                "hand": game_profile["hand"],
+                "head": game_profile["head"],
                 "dgrade": game_profile["grade_double"],
                 "sgrade": game_profile["grade_single"],
                 "score": score["ex_score"],
@@ -296,6 +364,8 @@ async def music_reg(request: Request):
                 "myFlg": score["iidx_id"] == iidx_id,
             }
         )
+        if game_version >= 31:
+            ranklist_scores_ranked[-1]["back"] = game_profile.get("back", 0)
 
     ranklist_scores_ranked = sorted(
         ranklist_scores_ranked, key=lambda x: (x["clflg"], x["score"]), reverse=True
@@ -308,6 +378,7 @@ async def music_reg(request: Request):
             opname=score["opname"],
             name=score["name"],
             pid=score["pid"],
+            # back=score["back"],
             body=score["body"],
             face=score["face"],
             hair=score["hair"],
@@ -322,17 +393,20 @@ async def music_reg(request: Request):
             achieve=0,
         )
         ranklist_data.append(r)
+        if game_version >= 31:
+            ranklist_data.append(E.data(back=score.get("back", 0)))
 
         if score["myFlg"]:
             myRank = rnum + 1
 
     response = E.response(
-        E.music(
+        E(
+            f"{IIDXver}music",
             E.ranklist(*ranklist_data, total_user_num=len(ranklist_data)),
             E.shopdata(rank=myRank),
             clid=clid,
-            crate=score_stats["clear_rate"] // 10,
-            frate=score_stats["fc_rate"] // 10,
+            crate=score_stats["clear_rate"],
+            frate=score_stats["fc_rate"],
             mid=music_id,
         )
     )
@@ -341,13 +415,17 @@ async def music_reg(request: Request):
     return Response(content=response_body, headers=response_headers)
 
 
-@router.post("/{gameinfo}/music/appoint")
-async def music_appoint(request: Request):
+@router.post("/{prefix}/{gameinfo}/{IIDXver}music/appoint")
+async def iidx_music_appoint(IIDXver: str, request: Request):
     request_info = await core_process_request(request)
 
-    iidxid = int(request_info["root"][0].attrib["iidxid"])
-    music_id = int(request_info["root"][0].attrib["mid"])
-    chart_id = int(request_info["root"][0].attrib["clid"])
+    root = request_info["root"][0]
+
+    iidxid = int(root.attrib["iidxid"])
+    music_id = int(root.attrib["mid"])
+    chart_id = int(root.attrib["clid"])
+    ctype = int(root.attrib["ctype"])
+    subtype = root.attrib["subtype"]
 
     db = get_db()
     record = db.table("iidx_scores_best").get(
@@ -367,7 +445,168 @@ async def music_appoint(request: Request):
             )
         )
 
-    response = E.response(E.music(*vals))
+    if ctype == 1:
+        sdata = db.table("iidx_scores_best").get(
+            (where("iidx_id") == int(subtype))
+            & (where("music_id") == music_id)
+            & (where("chart_id") == chart_id)
+        )
+    elif ctype in (2, 4, 10):
+        sdata = {
+            "game_version": 29,
+            "ghost": "",
+            "ex_score": 0,
+            "iidx_id": 0,
+            "name": "",
+            "pid": 13,
+        }
+
+        for record in db.table("iidx_scores_best").search(
+            (where("music_id") == music_id) & (where("chart_id") == chart_id)
+        ):
+            if record["ex_score"] > sdata["ex_score"]:
+                sdata["game_version"] = record["game_version"]
+                sdata["ghost"] = record["ghost"]
+                sdata["ex_score"] = record["ex_score"]
+                sdata["iidx_id"] = record["iidx_id"]
+                sdata["pid"] = record["pid"]
+
+    if ctype in (1, 2, 4, 10) and sdata["ex_score"] != 0:
+        vals.append(
+            E.sdata(
+                sdata["ghost"],
+                score=sdata["ex_score"],
+                name=db.table("iidx_profile").get(where("iidx_id") == sdata["iidx_id"])[
+                    "version"
+                ][str(sdata["game_version"])]["djname"],
+                pid=sdata["pid"],
+                __type="bin",
+                __size=len(sdata["ghost"]) // 2,
+            )
+        )
+
+    response = E.response(E(f"{IIDXver}music", *vals))
 
     response_body, response_headers = await core_prepare_response(request, response)
     return Response(content=response_body, headers=response_headers)
+
+
+@router.post("/{prefix}/{gameinfo}/{IIDXver}music/arenaCPU")
+async def iidx_music_arenacpu(IIDXver: str, request: Request):
+    request_info = await core_process_request(request)
+
+    root = request_info["root"][0]
+    music_list = root.findall("music_list")
+    music_count = len(music_list)
+    cpu_list = root.findall("cpu_list")
+    cpu_count = len(cpu_list)
+
+    cpu = {}
+
+    for music in music_list:
+        music_idx = int(music.find("index").text)
+        exscore_max = int(music.find("total_notes").text) * 2
+
+        cpu[music_idx] = {}
+
+        for bot_idx in range(cpu_count):
+            cpu[music_idx][bot_idx] = {}
+
+            exscore = round(exscore_max * random.uniform(0.77, 0.93))
+            cpu[music_idx][bot_idx]["exscore"] = exscore
+
+            ghost_len = 64
+            ghost_data = [0] * ghost_len
+            for x in range(ghost_len):
+                ghost_data[x] = exscore // ghost_len
+                if (exscore % ghost_len) > x:
+                    ghost_data[x] += 1
+
+            cpu[music_idx][bot_idx]["ghost_data"] = ghost_data
+
+    response = E.response(
+        E(
+            f"{IIDXver}music",
+            *[
+                E.cpu_score_list(
+                    E.index(bot_idx, __type="s32"),
+                    *[
+                        E.score_list(
+                            E.index(music_idx, __type="s32"),
+                            E.score(cpu[music_idx][bot_idx]["exscore"], __type="s32"),
+                            E.ghost(cpu[music_idx][bot_idx]["ghost_data"], __type="s8"),
+                            E.enable_score(1, __type="bool"),
+                            E.enable_ghost(1, __type="bool"),
+                            E.location_id("X000000001", __type="str"),
+                        )
+                        for music_idx in range(music_count)
+                    ],
+                )
+                for bot_idx in range(cpu_count)
+            ],
+        )
+    )
+
+    response_body, response_headers = await core_prepare_response(request, response)
+    return Response(content=response_body, headers=response_headers)
+
+
+@router.post("/{prefix}/{gameinfo}/{IIDXver}music/retry")
+async def iidx_music_retry(IIDXver: str, request: Request):
+    request_info = await core_process_request(request)
+
+    response = E.response(
+        E(
+            f"{IIDXver}music",
+            E.session(session_id=1),
+            status=0,
+        )
+    )
+
+    response_body, response_headers = await core_prepare_response(request, response)
+    return Response(content=response_body, headers=response_headers)
+
+
+@router.post("/{prefix}/{gameinfo}/{IIDXver}music/play")
+async def iidx_music_play(IIDXver: str, request: Request):
+    request_info = await core_process_request(request)
+
+    response = E.response(E(f"{IIDXver}music",))
+
+    response_body, response_headers = await core_prepare_response(request, response)
+    return Response(content=response_body, headers=response_headers)
+
+
+@router.post("/{prefix}/{gameinfo}/{IIDXver}music/nosave")
+async def iidx_music_nosave(IIDXver: str, request: Request):
+    request_info = await core_process_request(request)
+
+    response = E.response(E(f"{IIDXver}music",))
+
+    response_body, response_headers = await core_prepare_response(request, response)
+    return Response(content=response_body, headers=response_headers)
+
+
+@router.post("/{prefix}/{gameinfo}/{IIDXver}music/getranksub")
+async def iidx_music_getranksub(IIDXver: str, request: Request):
+    request_info = await core_process_request(request)
+
+    response = E.response(E(f"{IIDXver}music",))
+
+    response_body, response_headers = await core_prepare_response(request, response)
+    return Response(content=response_body, headers=response_headers)
+
+@router.post("/{prefix}/{gameinfo}/{IIDXver}music/movieinfo")
+async def iidx_music_movieinfo(IIDXver: str, request: Request):
+    request_info = await core_process_request(request)
+
+    response = E.response(
+        E(
+            f"{IIDXver}music",
+            status=0,
+        )
+    )
+
+    response_body, response_headers = await core_prepare_response(request, response)
+    return Response(content=response_body, headers=response_headers)
+

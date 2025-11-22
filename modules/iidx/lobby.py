@@ -6,7 +6,7 @@ from fastapi import APIRouter, Request, Response
 
 from core_common import core_process_request, core_prepare_response, E
 
-router = APIRouter(prefix="/lobby", tags=["lobby"])
+router = APIRouter(tags=["lobby", "lobby2"])
 router.model_whitelist = ["LDJ"]
 
 
@@ -14,8 +14,8 @@ arena_host = {}
 bpl_host = {}
 
 
-@router.post("/{gameinfo}/IIDX30lobby/entry")
-async def iidx30lobby_entry(request: Request):
+@router.post("/{prefix}/{gameinfo}/{IIDXver}lobby/entry")
+async def iidx_lobby_entry(IIDXver: str, request: Request):
     request_info = await core_process_request(request)
 
     root = request_info["root"][0]
@@ -33,7 +33,8 @@ async def iidx30lobby_entry(request: Request):
         else:
             is_arena_host = 0
         response = E.response(
-            E.IIDX30lobby(
+            E(
+                f"{IIDXver}lobby",
                 E.host(is_arena_host, __type="bool"),
                 E.matching_class(arena_class, __type="s32"),
                 E.address(
@@ -49,7 +50,8 @@ async def iidx30lobby_entry(request: Request):
         arena_host["la"] = la
         arena_host["time"] = time() + 30
         response = E.response(
-            E.IIDX30lobby(
+            E(
+                f"{IIDXver}lobby",
                 E.host(1, __type="bool"),
                 E.matching_class(arena_class, __type="s32"),
                 E.address(
@@ -64,18 +66,18 @@ async def iidx30lobby_entry(request: Request):
     return Response(content=response_body, headers=response_headers)
 
 
-@router.post("/{gameinfo}/IIDX30lobby/update")
-async def iidx30lobby_update(request: Request):
+@router.post("/{prefix}/{gameinfo}/{IIDXver}lobby/update")
+async def iidx_lobby_update(IIDXver: str, request: Request):
     request_info = await core_process_request(request)
 
-    response = E.response(E.IIDX30lobby())
+    response = E.response(E(f"{IIDXver}lobby",))
 
     response_body, response_headers = await core_prepare_response(request, response)
     return Response(content=response_body, headers=response_headers)
 
 
-@router.post("/{gameinfo}/IIDX30lobby/delete")
-async def iidx30lobby_delete(request: Request):
+@router.post("/{prefix}/{gameinfo}/IIDX33lobby/delete")
+async def iidx_lobby_delete(IIDXver: str, request: Request):
     request_info = await core_process_request(request)
 
     # normal reset
@@ -83,14 +85,14 @@ async def iidx30lobby_delete(request: Request):
     del arena_host["gp"]
     del arena_host["la"]
     del arena_host["time"]
-    response = E.response(E.IIDX30lobby())
+    response = E.response(E(f"{IIDXver}lobby",))
 
     response_body, response_headers = await core_prepare_response(request, response)
     return Response(content=response_body, headers=response_headers)
 
 
-@router.post("/{gameinfo}/IIDX30lobby/bplbattle_entry")
-async def iidx30lobby_bplbattle_entry(request: Request):
+@router.post("/{prefix}/{gameinfo}/{IIDXver}lobby/bplbattle_entry")
+async def iidx_lobby_bplbattle_entry(IIDXver: str, request: Request):
     request_info = await core_process_request(request)
 
     root = request_info["root"][0]
@@ -109,7 +111,8 @@ async def iidx30lobby_bplbattle_entry(request: Request):
         else:
             is_bpl_host = 0
         response = E.response(
-            E.IIDX30lobby(
+            E(
+                f"{IIDXver}lobby",
                 E.host(is_bpl_host, __type="bool"),
                 E.matching_class(arena_class, __type="s32"),
                 E.address(
@@ -126,7 +129,8 @@ async def iidx30lobby_bplbattle_entry(request: Request):
         bpl_host[password]["la"] = la
         bpl_host[password]["time"] = time() + 30
         response = E.response(
-            E.IIDX30lobby(
+            E(
+                f"{IIDXver}lobby",
                 E.host(1, __type="bool"),
                 E.matching_class(arena_class, __type="s32"),
                 E.address(
@@ -141,18 +145,18 @@ async def iidx30lobby_bplbattle_entry(request: Request):
     return Response(content=response_body, headers=response_headers)
 
 
-@router.post("/{gameinfo}/IIDX30lobby/bplbattle_update")
-async def iidx30lobby_bplbattle_update(request: Request):
+@router.post("/{prefix}/{gameinfo}/{IIDXver}lobby/bplbattle_update")
+async def iidx_lobby_bplbattle_update(IIDXver: str, request: Request):
     request_info = await core_process_request(request)
 
-    response = E.response(E.IIDX30lobby())
+    response = E.response(E(f"{IIDXver}lobby",))
 
     response_body, response_headers = await core_prepare_response(request, response)
     return Response(content=response_body, headers=response_headers)
 
 
-@router.post("/{gameinfo}/IIDX30lobby/bplbattle_delete")
-async def iidx30lobby_bplbattle_delete(request: Request):
+@router.post("/{prefix}/{gameinfo}/{IIDXver}lobby/bplbattle_delete")
+async def iidx_lobby_bplbattle_delete(IIDXver: str, request: Request):
     request_info = await core_process_request(request)
 
     root = request_info["root"][0]
@@ -163,7 +167,7 @@ async def iidx30lobby_bplbattle_delete(request: Request):
         if bpl_host[host]["ga"] == ga:
             del bpl_host[host]
             break
-    response = E.response(E.IIDX30lobby())
+    response = E.response(E(f"{IIDXver}lobby",))
 
     response_body, response_headers = await core_prepare_response(request, response)
     return Response(content=response_body, headers=response_headers)

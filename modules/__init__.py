@@ -44,7 +44,12 @@ async def forward_slashless(
         try:
             game_code = model.split(":")[0]
             # TODO: check for more edge cases
-            if game_code == "MDX" and module == "eventlog" or module == "eventlog_2":
+            if game_code == "LDJ":
+                iidx_module = "".join(filter(str.isalpha, module.split("IIDX")[-1]))
+                iidx_version = "".join(filter(str.isnumeric, module))
+                find_response = globals()[f"iidx_{iidx_module}_{method}".lower()]
+                return await find_response(f"IIDX{iidx_version}", request)
+            elif game_code == "MDX" and module == "eventlog" or module == "eventlog_2":
                 find_response = globals()[f"ddr_{module}_{method}"]
             elif game_code == "REC":
                 find_response = globals()[f"drs_{module}_{method}"]
@@ -58,8 +63,9 @@ async def forward_slashless(
                     find_response = globals()[f"gitadora_{gd_module[-1]}_{method}"]
                     return await find_response(gd_module[0], request)
             return await find_response(request)
-        except (KeyError, UnboundLocalError):
-            print("Try URL Slash 1 (On) if this game is supported.")
+        except (KeyError, UnboundLocalError) as e:
+            print(f"{type(e).__name__}: {e}")
+            print("Try URL Slash 1 (On) for better error logs.")
             return Response(status_code=404)
 
 

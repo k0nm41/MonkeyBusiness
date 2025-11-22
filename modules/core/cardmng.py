@@ -1,10 +1,12 @@
+import config
+
 from fastapi import APIRouter, Request, Response
 from tinydb import Query, where
 
 from core_common import core_process_request, core_prepare_response, E
 from core_database import get_db
 
-router = APIRouter(prefix="/core", tags=["cardmng"])
+router = APIRouter(prefix=config.services_prefix, tags=["cardmng"])
 
 
 def get_target_table(game_id):

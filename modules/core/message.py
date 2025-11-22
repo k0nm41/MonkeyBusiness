@@ -4,7 +4,7 @@ from fastapi import APIRouter, Request, Response
 
 from core_common import core_process_request, core_prepare_response, E
 
-router = APIRouter(prefix="/core", tags=["message"])
+router = APIRouter(prefix=config.services_prefix, tags=["message"])
 
 
 @router.post("/{gameinfo}/message/get")

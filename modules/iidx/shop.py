@@ -1,21 +1,28 @@
 import config
 
 from fastapi import APIRouter, Request, Response
+from tinydb import Query, where
 
 from core_common import core_process_request, core_prepare_response, E
+from core_database import get_db
 
-router = APIRouter(prefix="/local", tags=["local"])
+router = APIRouter(tags=["local", "local2"])
 router.model_whitelist = ["LDJ", "KDZ", "JDZ"]
 
 
-@router.post("/{gameinfo}/shop/getname")
-async def shop_getname(request: Request):
+@router.post("/{prefix}/{gameinfo}/{IIDXver}shop/getname")
+async def iidx_shop_getname(IIDXver: str, request: Request):
     request_info = await core_process_request(request)
+    pcbid = request_info["root"].attrib["srcid"]
+
+    op = get_db().table("shop").get(where("pcbid") == pcbid)
+    op = {} if op is None else op
 
     response = E.response(
-        E.shop(
+        E(
+            f"{IIDXver}shop",
             cls_opt=0,
-            opname=config.arcade,
+            opname=op.get("opname", config.arcade),
             pid=13,
         )
     )
@@ -24,12 +31,32 @@ async def shop_getname(request: Request):
     return Response(content=response_body, headers=response_headers)
 
 
-@router.post("/{gameinfo}/shop/getconvention")
-async def shop_getconvention(request: Request):
+@router.post("/{prefix}/{gameinfo}/{IIDXver}shop/savename")
+async def iidx_shop_savename(IIDXver: str, request: Request):
+    request_info = await core_process_request(request)
+    pcbid = request_info["root"].attrib["srcid"]
+    opname = request_info["root"][0].attrib["opname"]
+
+    shop_info = {
+        "pcbid": pcbid,
+        "opname": opname,
+    }
+
+    get_db().table("shop").upsert(shop_info, where("pcbid") == pcbid)
+
+    response = E.response(E(f"{IIDXver}shop",))
+
+    response_body, response_headers = await core_prepare_response(request, response)
+    return Response(content=response_body, headers=response_headers)
+
+
+@router.post("/{prefix}/{gameinfo}/{IIDXver}shop/getconvention")
+async def iidx_shop_getconvention(IIDXver: str, request: Request):
     request_info = await core_process_request(request)
 
     response = E.response(
-        E.shop(
+        E(
+            f"{IIDXver}shop",
             E.valid(1, __type="bool"),
             music_0=-1,
             music_1=-1,
@@ -44,21 +71,45 @@ async def shop_getconvention(request: Request):
     return Response(content=response_body, headers=response_headers)
 
 
-@router.post("/{gameinfo}/shop/sentinfo")
-async def shop_sentinfo(request: Request):
+@router.post("/{prefix}/{gameinfo}/{IIDXver}shop/sentinfo")
+async def iidx_shop_sentinfo(IIDXver:str, request: Request):
     request_info = await core_process_request(request)
 
-    response = E.response(E.shop())
+    response = E.response(E(f"{IIDXver}shop",))
 
     response_body, response_headers = await core_prepare_response(request, response)
     return Response(content=response_body, headers=response_headers)
 
 
-@router.post("/{gameinfo}/shop/sendescapepackageinfo")
-async def shop_sendescapepackageinfo(request: Request):
+@router.post("/{prefix}/{gameinfo}/{IIDXver}shop/sendescapepackageinfo")
+async def iidx_shop_sendescapepackageinfo(IIDXver:str, request: Request):
     request_info = await core_process_request(request)
 
-    response = E.response(E.shop(expire=1200))
+    response = E.response(E(f"{IIDXver}shop", expire=1200))
+
+    response_body, response_headers = await core_prepare_response(request, response)
+    return Response(content=response_body, headers=response_headers)
+
+@router.post("/{prefix}/{gameinfo}/{IIDXver}shop/getclosingtime")
+async def iidx_shop_getclosingtime(IIDXver:str, request: Request):
+    request_info = await core_process_request(request)
+
+    response = E.response(
+        E(
+            f"{IIDXver}shop",
+            E.exist(1, __type="bool"),
+            *[E.week(cls_opt=0, week=i) for i in range(7)]
+        )
+    )
+
+    response_body, response_headers = await core_prepare_response(request, response)
+    return Response(content=response_body, headers=response_headers)
+
+@router.post("/{prefix}/{gameinfo}/{IIDXver}shop/saveclosingtime")
+async def iidx_shop_saveclosingtime(IIDXver:str, request: Request):
+    request_info = await core_process_request(request)
+
+    response = E.response(E(f"{IIDXver}shop",))
 
     response_body, response_headers = await core_prepare_response(request, response)
     return Response(content=response_body, headers=response_headers)

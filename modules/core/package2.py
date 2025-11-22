@@ -1,8 +1,10 @@
+import config
+
 from fastapi import APIRouter, Request, Response
 
 from core_common import core_process_request, core_prepare_response, E
 
-router = APIRouter(prefix="/core", tags=["package2"])
+router = APIRouter(prefix=config.services_prefix, tags=["package2"])
 
 
 @router.post("/{gameinfo}/package2/list")

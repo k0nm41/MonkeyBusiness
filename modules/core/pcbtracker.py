@@ -6,7 +6,7 @@ from fastapi import APIRouter, Request, Response
 
 from core_common import core_process_request, core_prepare_response, E
 
-router = APIRouter(prefix="/core", tags=["pcbtracker"])
+router = APIRouter(prefix=config.services_prefix, tags=["pcbtracker"])
 
 
 @router.post("/{gameinfo}/pcbtracker/alive")

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Request, Response
 from core_common import core_process_request, core_prepare_response, E
 from core_database import get_db
 
-router = APIRouter(prefix="/local2", tags=["local2"])
+router = APIRouter(tags=["local", "local2"])
 router.model_whitelist = ["LDJ"]
 
 
@@ -15,8 +15,8 @@ def get_profile(iidx_id):
     return get_db().table("iidx_profile").get(where("iidx_id") == iidx_id)
 
 
-@router.post("/{gameinfo}/IIDX31grade/raised")
-async def iidx31grade_raised(request: Request):
+@router.post("/{prefix}/{gameinfo}/{IIDXver}grade/raised")
+async def iidx_grade_raised(IIDXver: str, request: Request):
     request_info = await core_process_request(request)
     game_version = request_info["game_version"]
 
@@ -110,7 +110,7 @@ async def iidx31grade_raised(request: Request):
 
     db.table("iidx_profile").upsert(profile, where("game_version") == game_version)
 
-    response = E.response(E.IIDX31grade(pnum=1))
+    response = E.response(E(f"{IIDXver}grade", pnum=1))
 
     response_body, response_headers = await core_prepare_response(request, response)
     return Response(content=response_body, headers=response_headers)
