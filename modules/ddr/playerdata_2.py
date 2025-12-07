@@ -147,11 +147,11 @@ async def playerdata_2_usergamedata_advanced(request: Request):
                         E.comptime(1, __type="s32"),
                         E.savedata(0, __type="s64"),
                     )
-                    for event in [
-                        e
-                        for e in range(1, 100)
-                        if e not in [4, 6, 7, 8, 14, 47, 89, 90]
-                    ]
+                    for event in [30, 76, 79, 89, 91]
+                    #    e
+                    #    for e in range(1, 100)
+                    #    if e not in [4, 6, 7, 8, 14, 47, 90]
+                    #]
                 ],
                 E.grade(
                     E.single_grade(profile.get("single_grade", 0), __type="u32"),
@@ -566,9 +566,16 @@ async def playerdata_2_usergamedata_advanced(request: Request):
             )
         )
 
+    elif mode == "mergeddataload":
+        response = E.response(
+            E.playerdata_2(
+                E.result(0, __type="s32"),
+            )
+        )
+
     else:
         response = E.response(
-            E.playerdata(
+            E.playerdata_2(
                 E.result(1, __type="s32"),
             )
         )
