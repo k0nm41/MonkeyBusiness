@@ -147,11 +147,20 @@ async def playerdata_2_usergamedata_advanced(request: Request):
                         E.comptime(1, __type="s32"),
                         E.savedata(0, __type="s64"),
                     )
-                    for event in [30, 76, 79, 89, 91]
-                    #    e
-                    #    for e in range(1, 100)
-                    #    if e not in [4, 6, 7, 8, 14, 47, 90]
+                    for event in [
+                    #    30,
+                    #    76,
+                    #    79,
+                    #    89, # galaxy play
+                    #    91,
+                    #    35, # dan courses
+                    #    36, # nonstop courses
+                    #    70, # early play music pack
                     #]
+                        e
+                        for e in range(100, 1, -1)
+                        if e not in [4, 6, 7, 8, 14, 47, 90]
+                    ]
                 ],
                 E.grade(
                     E.single_grade(profile.get("single_grade", 0), __type="u32"),
